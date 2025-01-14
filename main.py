@@ -7,7 +7,7 @@
 # }
 # ###############################################
 # create user: curl -X POST -d '{"username":"user", "password":"password"}' -H 'Content-Type: application/json'  localhost:5000/users
-# if responce code 201 then user created, else failed (or user exists), currently there is no logged in user required to create user
+# if responce code 200 then user created, else failed (or user exists), currently there is no logged in user required to create user
 #############################################
 # request to protected endpoint: curl -X GET -H 'Content-Type: application/json' -H 'Authorization: Bearer <JWT_TOKEN>' localhost:5000/protected 
 #curl -X GET -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTczMjAzNDk1NywianRpIjoiMzBkYTA2YWItYTVkYS00NWY0LWIwNGQtNzA1MjdhNDBmM2IwIiwidHlwZSI6ImFjY2VzcyIsInN1YiI6ImFkbWluIiwibmJmIjoxNzMyMDM0OTU3LCJjc3JmIjoiY2U1ZWY3NmMtNzAwYy00NzczLWI2MzMtOGQ5YjViODhiZTM2IiwiZXhwIjoxNzMyMDM1ODU3fQ.7y19ebVC71AKVQCaB6_G2bH6IBM6__n7FDDiF2OoBlM' localhost:5000/protected
@@ -16,8 +16,42 @@
 # }
 
 #
+# create rent for car - no login requried (for tests)
+# curl -X POST -d '{"id":"123123123", "brand":"test", "model":"12123123", "rentalOption":"test"}' -H 'Content-Type: application/json'  localhost:5000/rentals
+# return POST:
+# {
+#   "message": "Rental created successfully"
+# }
+# return GET
+# [
+#   {
+#     "brand": "test",
+#     "id": "123123123",
+#     "model": "12123123",
+#     "rentalOption": "test"
+#   }
+# ]
+#
+# create car  - no login requrired (for tests)
+# curl -X POST -d '{"brand":"123123123", "model":"test", "year": 123, "fuel":"gasoline", "pricePerDay": "tooMuchForMe"}' -H 'Content-Type: application/json'  localhost:5000/cars
+# return POST:
+# {
+#   "message": "Car created successfully"
+# }
+# return GET:
+# [
+#   {
+#     "brand": "123123123",
+#     "fuel": "gasoline",
+#     "model": "test",
+#     "pricePerDay": "tooMuchForMe",
+#     "year": 123
+#   }
+# ]
 
 
+rentals = list()
+cars = list()
 
 
 
@@ -43,30 +77,37 @@ Swagger(app)
 users = {}
 users['admin'] = generate_password_hash('admin')
 
+cars = list()
+
+@app.route('/rentals', methods=['POST'])
+def create_rental():
+    """Endpoint to create a new rental."""
+    data = request.get_json()
+    if not ('id' in data and 'brand' in data and 'model' in data and 'rentalOption' in data):
+        return jsonify({'message': 'Invalid input'}), 400
+    rentals.append(data)
+    return jsonify({'message': 'Rental created successfully'}), 200
+
+@app.route('/rentals', methods=['GET'])
+def get_rentals():
+    """Endpoint to retrieve the list of rentals."""
+    return jsonify(rentals), 200
+
+@app.route('/cars', methods=['POST'])
+def create_car():
+    data = request.get_json()
+    if not ('brand' in data and 'model' in data and 'year' in data and 'fuel' in data and 'pricePerDay' in data):
+        return jsonify({'message': 'Invalid input'}), 400
+    cars.append(data)
+    return jsonify({'message': 'Car created successfully'}), 200
+
+@app.route('/cars', methods=['GET'])
+def get_cars():
+    """Endpoint to retrieve the list of cars."""
+    return jsonify(cars), 200
+
+
 @app.route('/users', methods=['POST'])
-@swag_from({
-    'tags': ['User'],
-    'description': 'Create a new user with a username and password.',
-    'parameters': [
-        {
-            'name': 'body',
-            'in': 'body',
-            'required': True,
-            'schema': {
-                'type': 'object',
-                'properties': {
-                    'username': {'type': 'string'},
-                    'password': {'type': 'string'}
-                },
-                'required': ['username', 'password']
-            }
-        }
-    ],
-    'responses': {
-        201: {'description': 'User created successfully.'},
-        400: {'description': 'User already exists or invalid input.'}
-    }
-})
 def create_user():
     """Endpoint to create a new user"""
     data = request.get_json()
@@ -78,32 +119,9 @@ def create_user():
         return jsonify({'message': 'User already exists'}), 400
     hashed_password = generate_password_hash(password)
     users[username] = hashed_password
-    return jsonify({'message': 'User created successfully'}), 201
+    return jsonify({'message': 'User created successfully'}), 200
 
 @app.route('/login', methods=['POST'])
-@swag_from({
-    'tags': ['Authentication'],
-    'description': 'Login with username and password to receive a JWT token.',
-    'parameters': [
-        {
-            'name': 'body',
-            'in': 'body',
-            'required': True,
-            'schema': {
-                'type': 'object',
-                'properties': {
-                    'username': {'type': 'string'},
-                    'password': {'type': 'string'}
-                },
-                'required': ['username', 'password']
-            }
-        }
-    ],
-    'responses': {
-        200: {'description': 'Login successful, JWT token returned.'},
-        401: {'description': 'Invalid credentials.'}
-    }
-})
 def login():
     """Endpoint to login and receive a JWT"""
     data = request.get_json()
@@ -114,18 +132,9 @@ def login():
         access_token = create_access_token(identity=username)
         return jsonify({'access_token': access_token}), 200
     else:
-        return jsonify({'message': 'Invalid credentials'}), 401
+        return jsonify({'message': 'Invalid credentials'}), 400
 
-@app.route('/protected', methods=['GET'])
-@jwt_required()
-@swag_from({
-    'tags': ['Protected'],
-    'description': 'Access a protected endpoint with a valid JWT token.',
-    'responses': {
-        200: {'description': 'Access granted.'},
-        401: {'description': 'Unauthorized access.'}
-    }
-})
+
 def protected():
     """Protected endpoint accessible only with a valid JWT"""
     current_user = get_jwt_identity()
